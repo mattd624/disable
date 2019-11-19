@@ -31,7 +31,7 @@ include realpath(COMMON_PHP_DIR . '/checkWait.php');
 
 date_default_timezone_set('America/Los_Angeles');
 ini_set("soap.wsdl_cache_enabled", "0");  // clean WSDL for develop
-ini_set("allow_url_fopen", true);
+//ini_set("allow_url_fopen", true);
 $f_name = pathinfo(__FILE__)['basename'];
 
 //////////////////////////////////////// Variables /////////////////////////////////////////////////
@@ -331,6 +331,7 @@ if (array_key_exists('OrganizationId', $request_array)) {
 
 
 $arr_size=count($request_array['MapsRecords']);
+$success_count = 0;
 log_writeln("\n\n=====================================================================================================\n\n");
 log_writeln("\n NUMBER OF NOTIFICATIONS IN MESSAGE: $arr_size\n");
 
@@ -340,6 +341,13 @@ for($i=0;$i<$arr_size;$i++) {
   $tf_string = $request_array['MapsRecords'][$i]['Disable_IP__c']; //value here is 'true' or 'false'
 //									log_writeln("\ntf_string: $tf_string");
   $ip_string = $request_array['MapsRecords'][$i]['IP__c'];
+  $ip_is_valid = filter_var($ip_string, FILTER_VALIDATE_IP);
+  if (!$ip_is_valid) {
+    $msg = "IP address: $ip_string is not recognized as valid";
+    log_writeln("\n\n$msg\n");
+    slack("$f_name :: $msg", 'mattd');
+    $success_count++;
+  }
 //									log_writeln("\nip_string: $ip_string");
   $msg_array[$tf_string][] = $ip_string;
 }
@@ -361,39 +369,33 @@ try {
             $remchk = rem_fr_routes($ipArray, 3);
             if ($remchk){
               log_writeln("\n\nrem_fr_routes - $routeCmd SUCCESS\n\n");
-              $success = true;
+              $success_count++;
             } else {
               $msg = "rem_fr_routes - $routeCmd FAIL";
               log_writeln("\n\n$msg\n\n");
               slack("$f_name :: $msg", 'mattd');
-              $success = false;
             }
           } else if ($routeCmd == 'true'){
             $addchk = add_to_route($ipArray); 
             if ($addchk){
               log_writeln("\n\nadd_to_route $routeCmd SUCCESS\n\n");
-              $success = true;
+              $success_count++;
             } else {
               $msg = "add_to_route - $routeCmd FAIL";
               log_writeln("\n\n$msg\n\n");
               slack("$f_name :: $msg", 'mattd');
-              $success = false;
             }
           } else {
             $msg = "I DO NOT UNDERSTAND THE COMMAND: $routeCmd";
             log_writeln("\n\n$msg \n");
             slack("$f_name :: $msg", 'mattd');
-            respond('true');
-            exit;
           }
         }
       }
     }
-  } else {
-    $success = false;
   }
 
-  if ($success) {
+  if ($success_count == $arr_size) {
     $resp = ob_get_clean();
     respond('true');
   } else {
