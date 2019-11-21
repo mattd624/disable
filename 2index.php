@@ -28,16 +28,14 @@ include realpath(COMMON_PHP_DIR . '/parseNotification.php');
 include realpath(COMMON_PHP_DIR . '/deleteOldLogs.php');
 include realpath(COMMON_PHP_DIR . '/checkWait.php');
 include realpath(COMMON_PHP_DIR . '/writelog.php');
-include realpath(COMMON_PHP_DIR . '/logTime.php');
 //$wsdl = __DIR__ . '/wsdl/' . 'soapxml.wsdl'; // the wsdl directory location, with file called soapxml.wsdl
 
 date_default_timezone_set('America/Los_Angeles');
 ini_set("soap.wsdl_cache_enabled", "0");  // clean WSDL for develop
 ini_set("allow_url_fopen", true);
 $f_name = pathinfo(__FILE__)['basename'];
-$f_dir = pathinfo(__FILE__)['dirname'];
+$f_dir = pathinfo(__FILE__)['basedir'];
 $log_dir = '/log/';
-
 //////////////////////////////////////// Variables /////////////////////////////////////////////////
 
 
@@ -56,6 +54,7 @@ while ($octet < 255) {
 
 
 /////////////////////////////////////////////// Functions //////////////////////////////////////////////////
+
 
 
 
@@ -149,12 +148,12 @@ function get_configured_routes($ips){  //input: array of IPs. Returns routes mat
 //                                                                    writelog("\n$f_name CMD0 RESULT: " . $cmd0_result);
 
   foreach($ips as $i){
-                                                                      writelog("\n\n $f_name IP is " . $i);
+                                                                      writelog("\n\n $f_name IP: " . $i);
     $cmd1_result = false;
     $cmd1 = "show run router static | include " . TAG . "\r"; 
     $ssh->write($cmd1);
     $cmd1_result = $ssh->read('#');
-                                                                      writelog("\n$f_name CMD1 RESULT:\n" . $cmd1_result . "\n:END CMD1 RESULT");
+                                                                      //writelog("\n$f_name CMD1 RESULT:\n" . $cmd1_result . "\n:END CMD1 RESULT");
     $pattern = '  ' . $i . '\/32 ' . NULL_RTE_ESC_IP . ' tag ' . TAG;
 //    								writelog("\n$f_name PATTERN: $pattern \n");
     $matches = array();
@@ -269,7 +268,7 @@ function add_to_route($arr_ipsToAdd){ // Input: IP address. Returns true if all 
     $ssh->setTimeout(2);
     $ssh->write($commit);
     $commit_result = $ssh->read($config_route_prompt);
-                                                                      writelog("\n$f_name COMMIT RESULT: \n $commit_result");
+                                                                      //writelog("\n$f_name COMMIT RESULT: \n $commit_result");
     $chk_ips = get_configured_routes($arr_ipsToAdd);
     $success = true;
     foreach ($arr_ipsToAdd as $i) {
@@ -292,6 +291,8 @@ function add_to_route($arr_ipsToAdd){ // Input: IP address. Returns true if all 
 
 
 //=================================================== START EXECUTION CODE =========================================================
+deleteOldLogs($f_dir . $log_dir, 90);
+log_time();
 ob_start();
 
 
@@ -336,14 +337,16 @@ writelog("\n NUMBER OF NOTIFICATIONS IN MESSAGE: $arr_size\n");
 $msg_array = array();
 
 for($i=0;$i<$arr_size;$i++) {
+  $id = $request_array['MapsRecords'][$i]['Id'];
+  $url = 'https://na131.salesforce.com/' . $id;
+  $opp = $request_array['MapsRecords'][$i]['Name'];
   $tf_string = $request_array['MapsRecords'][$i]['Disable_IP__c']; //value here is 'true' or 'false'
-//									writelog("\ntf_string: $tf_string");
   $ip_string = $request_array['MapsRecords'][$i]['IP__c'];
   $ip_is_valid = filter_var($ip_string, FILTER_VALIDATE_IP);
   if (!$ip_is_valid) {
     $msg = "IP address: $ip_string is not recognized as valid";
     writelog("\n\n$msg\n");
-    slack("$f_name :: $msg", 'mattd');
+    slack("$f_name :: $msg -- $url", 'mattd');
     $success_count++;
   }
 //									writelog("\nip_string: $ip_string");
@@ -371,7 +374,7 @@ try {
             } else {
               $msg = "rem_fr_routes - $routeCmd FAIL";
               writelog("\n\n$msg\n\n");
-              slack("$f_name :: $msg", 'mattd');
+              slack("$f_name :: $msg -- $url", 'mattd');
             }
           } else if ($routeCmd == 'true'){
             $addchk = add_to_route($ipArray); 
@@ -381,12 +384,12 @@ try {
             } else {
               $msg = "add_to_route - $routeCmd FAIL";
               writelog("\n\n$msg\n\n");
-              slack("$f_name :: $msg", 'mattd');
+              slack("$f_name :: $msg -- $url", 'mattd');
             }
           } else {
             $msg = "I DO NOT UNDERSTAND THE COMMAND: $routeCmd";
             writelog("\n\n$msg \n");
-            slack("$f_name :: $msg", 'mattd');
+            slack("$f_name :: $msg -- $url", 'mattd');
           }
         }
       }
@@ -403,10 +406,8 @@ try {
 } catch (Exception $e) {
   $msg = "Caught exception: $e->getMessage()";
   writelog("\n$msg\n");
-  slack("$f_name :: $msg" , 'mattd');
+  slack("$f_name :: $msg -- $url", 'mattd');
 }
 
-$logs_dir = __DIR__ . '/log/';
-deleteOldLogs($logs_dir, 60);
                                                     /////////////////////////////// END EXECUTION CODE ////////////////////////////////////////////
 ?>
